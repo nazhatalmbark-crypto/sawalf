@@ -5,7 +5,7 @@ import random
 import sqlite3
 import streamlit as st
 
-DB_PATH = "/tmp/sawalf_pro_v5.db"
+DB_PATH = "/tmp/sawalf_pro_v6.db"
 
 
 def get_connection():
@@ -39,10 +39,10 @@ st.set_page_config(
     page_title="منصة سوالف العراقية", page_icon="💬", layout="centered"
 )
 
-st.title("💬 تطبيق سوالف - الإصدار المطور")
+st.title("💬 تطبيق سوالف - الإصدار المحصن")
 st.write(
-    "دردشة حية مع غرف منفصلة (بنات، شباب، مختلط) ونظام دردشة خاصة (الخاص بين"
-    " الأعضاء)!"
+    "دردشة حية، غرف منفصلة، محادثات خاصة محفوظة، ومراقبة أمنية للكلمات المسيئة"
+    " في كل الأماكن!"
 )
 
 # لوحة التحكم الجانبية
@@ -59,12 +59,10 @@ room_options = [
 
 room_choice = st.sidebar.selectbox("اختر غرفة المحادثة:", room_options)
 
-# تحديد الغرفة الفعلية في حال اختيار الخاص
 actual_room = room_choice
 if "محادثة خاصة" in room_choice:
   target_user = st.sidebar.text_input("اكتب اسم الشخص للدردشة الخاصة معهم:")
   if target_user.strip():
-    # دمج وترتيب الأسماء حتى يكون اسم الغرفة الخاصة ثابت وموحد للطرفين
     users_sorted = sorted(
         [username.strip().lower(), target_user.strip().lower()]
     )
@@ -74,7 +72,7 @@ if "محادثة خاصة" in room_choice:
     actual_room = "DM_Waiting"
     st.sidebar.warning("يرجى كتابة اسم الشخص في الحقل أعلاه لبدء المحادثة الخاصة.")
 
-# قائمة الكلمات الممنوعة للدردشة العامة
+# قائمة الكلمات الممنوعة (تطبق على كل الغرف والخاص)
 BAD_WORDS = ["حيوان", "غبي", "زبالة", "ساقط", "فاشل", "كلب"]
 
 
@@ -135,28 +133,26 @@ if prompt := st.chat_input("اكتب رسالتك هنا..."):
   if "محادثة خاصة" in room_choice and actual_room == "DM_Waiting":
     st.error("يرجى إدخال اسم الشخص المطلوب في القائمة الجانبية أولاً!")
   else:
-    # فحص التجاوز فقط في الغرف العامة أو المختلطة
+    # فحص الكلمات المسيئة في كل مكان (الغرف العامة، بنات، شباب، والخاص)
     is_bad = False
-    if "العامة" in room_choice or "المختلطة" in room_choice:
-      for word in BAD_WORDS:
-        if word in prompt:
-          is_bad = True
-          break
+    for word in BAD_WORDS:
+      if word in prompt:
+        is_bad = True
+        break
 
     save_message(actual_room, username, "user", prompt)
 
     if is_bad:
-      alert_msg = f"⚠️ عذراً يا {username}, الألفاظ النابية ممنوعة هنا. التزم بالآداب!"
+      alert_msg = f"⚠️ عذراً يا {username}, الألفاظ النابية ممنوعة نهائياً في كل أقسام المنصة. التزم بالأخلاق!"
       save_message(actual_room, "مدير النظام", "assistant", alert_msg)
     elif "محادثة خاصة" not in room_choice:
-      # ردود البوت الذكية في الغرف العامة
       user_text = prompt.lower()
       if "السلام عليكم" in user_text or "سلام عليكم" in user_text:
         bot_reply = (
             f"وعليكم السلام ورحمة الله وبركاته يا هلا بيك يا {username}!"
         )
       elif "هلو" in user_text or "هلا" in user_text:
-        bot_reply = f"هلا بيك وبكل اهلنا يا {username}! منور الغرفة."
+        bot_reply = f"هلا بيك وبكل اهلنا يا {username}! منور المكان."
       elif "شلونك" in user_text or "شخبارك" in user_text:
         bot_reply = f"الحمد لله بخير مادامك موجود وتسأل يا {username}."
       else:
