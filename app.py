@@ -1,15 +1,19 @@
 import sqlite3
 import streamlit as st
 
+
 # إعداد قاعدة البيانات لتخزين الرسائل للأبد
 def init_db():
   conn = sqlite3.connect("sawalf.db")
   c = conn.cursor()
-  c.execute(
-      """CREATE TABLE IF NOT EXISTS messages
-                (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, role TEXT,"
-      " content TEXT)"""
-  )
+  c.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            role TEXT,
+            content TEXT
+        )
+    """)
   conn.commit()
   conn.close()
 
@@ -67,9 +71,7 @@ if prompt := st.chat_input("اكتب رسالتك وسيتم حفظها بقاع
     st.markdown(f"**{username}**: {prompt}")
 
   # رد النظام أو المساعد
-  bot_response = (
-      f"يا هلا بيك يا {username}! رسالتك انحرفت وتوثقت بقاعدة البيانات بنجاح."
-  )
+  bot_response = f"يا هلا بيك يا {username}! رسالتك انحفظت وتوثقت بقاعدة البيانات بنجاح."
   save_message("نظام سوالف", "assistant", bot_response)
   with st.chat_message("assistant"):
     st.markdown(f"**نظام سوالف**: {bot_response}")
