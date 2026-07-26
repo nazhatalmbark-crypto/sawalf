@@ -1,13 +1,14 @@
 import sqlite3
 import streamlit as st
 
+# مسار قاعدة البيانات في مجلد النظام المؤقت المسموح بالكتابة عليه
+DB_PATH = "/tmp/sawalf.db"
 
-# إعداد اتصال قاعدة البيانات
+
 def get_connection():
-  return sqlite3.connect("sawalf.db", check_same_thread=False)
+  return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
-# تهيئة الجدول بأمان
 def init_db():
   try:
     conn = get_connection()
@@ -22,8 +23,8 @@ def init_db():
         """)
     conn.commit()
     conn.close()
-  except Exception:
-    pass
+  except Exception as e:
+    st.error(f"خطأ في قاعدة البيانات: {e}")
 
 
 init_db()
@@ -43,7 +44,6 @@ st.sidebar.header("إعدادات الحساب")
 username = st.sidebar.text_input("اسمك الكريم:", "صديق سوالف")
 
 
-# دالة لجلب الرسائل مع معالجة الأخطاء تلقائياً
 def load_messages():
   try:
     init_db()
@@ -53,13 +53,12 @@ def load_messages():
     rows = c.fetchall()
     conn.close()
     return rows
-  except sqlite3.OperationalError:
+  except Exception:
     return []
 
 
-# دالة لحفظ رسالة جديدة مع التأكد من وجود الجدول
 def save_message(uname, role, content):
-  init_db()  # التأكد من إنشاء الجدول فوراً قبل الحفظ
+  init_db()
   conn = get_connection()
   c = conn.cursor()
   c.execute(
