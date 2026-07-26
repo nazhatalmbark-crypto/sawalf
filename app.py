@@ -2,9 +2,14 @@ import sqlite3
 import streamlit as st
 
 
-# إعداد قاعدة البيانات لتخزين الرسائل للأبد
+# إعداد اتصال قاعدة البيانات
+def get_connection():
+  return sqlite3.connect("sawalf.db", check_same_thread=False)
+
+
+# تهيئة الجدول بأمان
 def init_db():
-  conn = sqlite3.connect("sawalf.db")
+  conn = get_connection()
   c = conn.cursor()
   c.execute("""
         CREATE TABLE IF NOT EXISTS messages (
@@ -35,19 +40,23 @@ st.sidebar.header("إعدادات الحساب")
 username = st.sidebar.text_input("اسمك الكريم:", "صديق سوالف")
 
 
-# دالة لجلب الرسائل المخزنة
+# دالة لجلب الرسائل مع معالجة الأخطاء تلقائياً
 def load_messages():
-  conn = sqlite3.connect("sawalf.db")
-  c = conn.cursor()
-  c.execute("SELECT username, role, content FROM messages")
-  rows = c.fetchall()
-  conn.close()
-  return rows
+  try:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT username, role, content FROM messages")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+  except sqlite3.OperationalError:
+    init_db()
+    return []
 
 
 # دالة لحفظ رسالة جديدة
 def save_message(uname, role, content):
-  conn = sqlite3.connect("sawalf.db")
+  conn = get_connection()
   c = conn.cursor()
   c.execute(
       "INSERT INTO messages (username, role, content) VALUES (?, ?, ?)",
@@ -65,12 +74,10 @@ for uname, role, content in messages:
 
 # صندوق الإدخال التفاعلي
 if prompt := st.chat_input("اكتب رسالتك وسيتم حفظها بقاعدة البيانات..."):
-  # حفظ رسالة المستخدم
   save_message(username, "user", prompt)
   with st.chat_message("user"):
     st.markdown(f"**{username}**: {prompt}")
 
-  # رد النظام أو المساعد
   bot_response = f"يا هلا بيك يا {username}! رسالتك انحفظت وتوثقت بقاعدة البيانات بنجاح."
   save_message("نظام سوالف", "assistant", bot_response)
   with st.chat_message("assistant"):
