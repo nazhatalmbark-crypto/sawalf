@@ -9,18 +9,21 @@ def get_connection():
 
 # تهيئة الجدول بأمان
 def init_db():
-  conn = get_connection()
-  c = conn.cursor()
-  c.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT,
-            role TEXT,
-            content TEXT
-        )
-    """)
-  conn.commit()
-  conn.close()
+  try:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                role TEXT,
+                content TEXT
+            )
+        """)
+    conn.commit()
+    conn.close()
+  except Exception:
+    pass
 
 
 init_db()
@@ -43,6 +46,7 @@ username = st.sidebar.text_input("اسمك الكريم:", "صديق سوالف"
 # دالة لجلب الرسائل مع معالجة الأخطاء تلقائياً
 def load_messages():
   try:
+    init_db()
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT username, role, content FROM messages")
@@ -50,12 +54,12 @@ def load_messages():
     conn.close()
     return rows
   except sqlite3.OperationalError:
-    init_db()
     return []
 
 
-# دالة لحفظ رسالة جديدة
+# دالة لحفظ رسالة جديدة مع التأكد من وجود الجدول
 def save_message(uname, role, content):
+  init_db()  # التأكد من إنشاء الجدول فوراً قبل الحفظ
   conn = get_connection()
   c = conn.cursor()
   c.execute(
