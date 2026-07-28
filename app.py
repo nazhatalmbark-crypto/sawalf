@@ -1,11 +1,28 @@
 import hashlib
 import html
-from datetime import datetime, timedelta
+from datetime import datetime
 import random
 import sqlite3
+import requests
 import streamlit as st
 
-DB_PATH = "/tmp/sawalf_pro_v9.db"
+DB_PATH = "/tmp/sawalf_pro_v11.db"
+
+# إعدادات بوت تليجرام للإشعارات الفورية
+TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # ضع توكن البوت هنا
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"  # ضع ايدي حسابك هنا
+
+
+def send_telegram_notification(message):
+  if (
+      TELEGRAM_BOT_TOKEN != "YOUR_BOT_TOKEN_HERE"
+      and TELEGRAM_CHAT_ID != "YOUR_CHAT_ID_HERE"
+  ):
+    try:
+      url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={message}"
+      requests.get(url, timeout=2)
+    except Exception:
+      pass
 
 
 def get_connection():
@@ -34,11 +51,15 @@ def init_db():
                 username TEXT PRIMARY KEY
             )
         """)
-    # جدول المستخدمين مع تتبع وقت آخر ظهور (للمتواجدين)
+    # جدول المستخدمين مع إضافة خانة الأفاتار (الصورة الرمزية)
     c.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 gender TEXT,
+                avatar TEXT,
+                birth_month TEXT,
+                birth_year TEXT,
+                region TEXT,
                 last_active TEXT
             )
         """)
@@ -54,35 +75,11 @@ st.set_page_config(
     page_title="منصة سوالف العراقية", page_icon="💬", layout="centered"
 )
 
-st.title("💬 تطبيق سوالف - مع نظام المتواجدين حالياً")
-st.write(
-    "دردشة حية، غرف متعددة، محادثات خاصة، بحث حسب الجنس، ومعرفة الأعضاء"
-    " المتواجدين بالمنصة!"
-)
-
-# لوحة التحكم الجانبية
-st.sidebar.header("إعدادات الجلسة والملف الشخصي")
-username = st.sidebar.text_input("اسمك الكريم:", "صديق سوالف")
-user_gender = st.sidebar.selectbox("جنسك:", ["ذكر 👦", "أنثى 👧"])
-
-# تحديث بيانات المستخدم ووقت الظهور الحالي
-if username.strip():
-  try:
-    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "INSERT OR REPLACE INTO users (username, gender, last_active) VALUES"
-        " (?, ?, ?)",
-        (username.strip().lower(), user_gender, current_time_str),
-    )
-    conn.commit()
-    conn.close()
-  except Exception:
-    pass
+if "logged_in" not in st.session_state:
+  st.session_state.logged_in = False
+  st.session_state.username = ""
 
 
-# التحقق من الحظر
 def check_is_banned(uname):
   try:
     conn = get_connection()
@@ -95,9 +92,120 @@ def check_is_banned(uname):
     return False
 
 
-if username.strip() and check_is_banned(username):
-  st.error(f"🚫 عذراً يا ({username})، تم حظر حسابك من قبل الإدارة.")
+# --- شاشة تسجيل الدخول والملف الشخصي ---
+if not st.session_state.logged_in:
+  st.title("🛡️ بوابة دخول منصة سوالف")
+  st.write(
+      "أهلاً بك! اختر اسمك، صورتك الرمزية (الأفاتار)، ومعلوماتك للبدء:"
+  )
+
+  with st.form("register_form"):
+    input_username = st.text_input("اسم المستخدم الكريم:")
+    input_gender = st.selectbox("الجنس:", ["ذكر 👦", "أنثى 👧"])
+
+    # اختيار الأفاتار (الصورة الرمزية)
+    input_avatar = st.selectbox(
+        "اختر صورتك الرمزية (الأفاتار):",
+        ["💻", "👨‍💻", "👩‍💻", "🚀", "🛡️", "🔥", "🦁", "🦊", "🐼", "⭐", "🦅"],
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+      input_month = st.selectbox(
+          "شهر الميلاد:",
+          [
+              "كانون الثاني",
+              "شباط",
+              "آذار",
+              "نيسان",
+              "آيار",
+              "حزيران",
+              "تموز",
+              "آب",
+              "أيلول",
+              "تشرين الأول",
+              "تشرين الثاني",
+              "كانون الأول",
+          ],
+      )
+    with col2:
+      input_year = st.selectbox(
+          "سنة الميلاد:",
+          [str(y) for y in range(2015, 1970, -1)],
+      )
+
+    input_region = st.text_input("المنطقة / المحافظة (مثلاً: البصرة، بغداد...):")
+
+    submit_button = st.form_submit_button(
+        "دخول إلى المنصة 🚀", use_container_width=True
+    )
+
+    if submit_button:
+      clean_name = input_username.strip()
+      if not clean_name:
+        st.error("⚠️ عذراً، يرجى كتابة اسم المستخدم أولاً!")
+      elif check_is_banned(clean_name):
+        st.error("🚫 هذا الحساب محظور (مبند) من قبل الإدارة!")
+      else:
+        try:
+          current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+          conn = get_connection()
+          c = conn.cursor()
+          c.execute(
+              "INSERT OR REPLACE INTO users (username, gender, avatar,"
+              " birth_month, birth_year, region, last_active) VALUES (?, ?,"
+              " ?, ?, ?, ?, ?)",
+              (
+                  clean_name.lower(),
+                  input_gender,
+                  input_avatar,
+                  input_month,
+                  input_year,
+                  input_region.strip() or "غير محدد",
+                  current_time_str,
+              ),
+          )
+          conn.commit()
+          conn.close()
+
+          st.session_state.logged_in = True
+          st.session_state.username = clean_name
+          st.success("🎉 تم تسجيل الدخول بنجاح!")
+          st.rerun()
+        except Exception as e:
+          st.error(f"حدث خطأ: {e}")
+
   st.stop()
+
+# --- واجهة التطبيق بعد التسجيل ---
+username = st.session_state.username
+
+if check_is_banned(username):
+  st.error(f"🚫 عذراً يا ({username})، تم حظر حسابك من قبل الإدارة.")
+  if st.button("تسجيل الخروج"):
+    st.session_state.logged_in = False
+    st.rerun()
+  st.stop()
+
+
+# دالة لجلب أفاتار المستخدم من قاعدة البيانات
+def get_user_avatar(uname):
+  try:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT avatar FROM users WHERE username = ?", (uname.lower(),))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else "💬"
+  except Exception:
+    return "💬"
+
+
+st.title("💬 تطبيق سوالف العراقية")
+st.sidebar.header(f"👤 الحساب: {username}")
+if st.sidebar.button("تسجيل الخروج 🚪"):
+  st.session_state.logged_in = False
+  st.rerun()
 
 room_options = [
     "الدردشة العامة (Global)",
@@ -110,21 +218,17 @@ room_options = [
 ]
 
 room_choice = st.sidebar.selectbox("اختر القسم:", room_options)
-
 actual_room = room_choice
 
-# إذا اختار عرض الأعضاء المتواجدين
 if room_choice == "🟢 الأعضاء المتواجدون حالياً":
-  st.subheader("🟢 الأعضاء النشطون في المنصة مؤخراً")
-  st.write("هذه قائمة بالأشخاص الذين فتحوا التطبيق وتفاعلوا معه:")
+  st.subheader("🟢 الأعضاء المسجلون في المنصة")
 
 
   def get_online_users():
     try:
       conn = get_connection()
       c = conn.cursor()
-      # جلب المستخدمين الذين ظهروا خلال آخر 15 دقيقة مثلاً
-      c.execute("SELECT username, gender, last_active FROM users")
+      c.execute("SELECT username, gender, avatar, birth_year, region FROM users")
       rows = c.fetchall()
       conn.close()
       return rows
@@ -133,14 +237,11 @@ if room_choice == "🟢 الأعضاء المتواجدون حالياً":
 
 
   online_users = get_online_users()
-  if not online_users:
-    st.info("لا توجد بيانات متاحة حالياً.")
-  else:
-    for u_name, u_gender, u_time in online_users:
-      st.markdown(
-          f"👤 **{u_name}** ({u_gender}) - آخر ظهور: `[{u_time}]` 🟢 متصل"
-      )
-
+  for u_name, u_gender, u_avatar, u_year, u_region in online_users:
+    st.markdown(
+        f"{u_avatar} **{u_name}** | الجنس: {u_gender} | مواليد: `{u_year}` |"
+        f" المنطقة: `{u_region}` 🟢 متصل"
+    )
   st.stop()
 
 elif room_choice == "🔍 بحث عن شخص للخاص (حسب الجنس)":
@@ -173,7 +274,6 @@ elif room_choice == "🔍 بحث عن شخص للخاص (حسب الجنس)":
 
 
   found_users = get_users_by_gender(target_gender, username)
-
   if not found_users:
     st.info("📭 لا توجد حسابات مسجلة تطابق بحثك حالياً.")
     actual_room = "DM_Waiting"
@@ -304,14 +404,13 @@ if room_choice not in [
 ]:
   messages = load_messages(actual_room)
   for uname, role, content, timestamp, msg_hash in messages:
-    with st.chat_message(role):
+    # جلب أفاتار المرسل لعرضه بجانب الرسالة
+    user_avatar = get_user_avatar(uname) if role == "user" else "🤖"
+    with st.chat_message(role, avatar=user_avatar):
       st.markdown(f"**{uname}** `[{timestamp}]`:")
       st.markdown(content)
 
   if prompt := st.chat_input("اكتب رسالتك هنا..."):
-    if not username.strip():
-      username = "مستخدم مجهول"
-
     if actual_room == "DM_Waiting":
       st.error("يرجى اختيار شخص من قائمة البحث أولاً لبدء المحادثة!")
     else:
@@ -329,6 +428,10 @@ if room_choice not in [
             f"🚨 تم حظر الحساب ({username}) نهائياً بسبب استخدام كلمات مسيئة!"
         )
         save_message(actual_room, "مدير النظام", "assistant", alert_msg)
+        # إرسال إشعار فوري لتليجرام
+        send_telegram_notification(
+            f"⚠️ تم حظر المستخدم: {username}\nبسبب: {prompt}"
+        )
       elif "DM_" not in actual_room:
         user_text = prompt.lower()
         if "السلام عليكم" in user_text or "سلام عليكم" in user_text:
