@@ -4,7 +4,7 @@ import requests
 # إعدادات الصفحة
 st.set_page_config(page_title="منصة سوالف العراقية", page_icon="💬", layout="centered")
 
-# إعدادات بوت التليجرام (ضع التوكن والآيدي الخاص بك هنا)
+# إعدادات بوت التليجرام
 TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # استبدله بتوكن البوت الخاص بك
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"      # استبدله برقم الـ Chat ID الخاص بك
 
@@ -28,15 +28,15 @@ def check_moderation(text):
             return False, "⚠️ تنبيه من بوت الحماية: تم رصد كلمة غير لائقة، يرجى الالتزام بالآداب العامة!"
     return True, ""
 
-# تهيئة مخزن الرسائل والحالات
+# تهيئة المخزن
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "statuses" not in st.session_state:
-    st.session_state.statuses = {}
+if "users_data" not in st.session_state:
+    st.session_state.users_data = {}  # يحفظ بيانات كل مستخدم (صورة، محافظة، جنس، حالة)
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- واجهة تسجيل الدخول (البوابة) ---
+# --- واجهة تسجيل الدخول (البوابة الرئيسية) ---
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align: center;'>🇮🇶 بوابة دخول منصة سوالف</h1>", unsafe_allow_html=True)
     st.write("---")
@@ -46,10 +46,25 @@ if not st.session_state.logged_in:
         name = st.text_input("👤 اكتب اسمك الحلو هنا:", placeholder="مثلاً: حمودي البغدادي")
         status = st.text_input("📌 حالتك أو شوكت تتواجد؟", placeholder="مثلاً: موجود لليل / مشغول حالياً")
         
+        # اختيار الجنس والمحافظة
+        gender = st.selectbox("🚻 الجنس:", ["ذكر", "أنثى"])
+        governorate = st.selectbox("🏙️ المحافظة:", [
+            "بغداد", "البصرة", "نينوى", "أربيل", "السليمانية", "كركوك", "النجف", "كربلاء", 
+            "بابل", "الأنبار", "ديالى", "ذي قار", "ميسان", "المثنى", "القادسية", "واسط", "صلاح الدين", "دهوك"
+        ])
+        
+        # رفع الصورة الشخصية من المعرض
+        profile_image = st.file_uploader("🖼️ اختر صورتك الشخصية من المعرض:", type=["jpg", "png", "jpeg"])
+        
         if st.button("🚀 دخول للمنصة"):
             if name:
                 st.session_state.user_name = name
-                st.session_state.statuses[name] = status if status else "متواجد حالياً"
+                st.session_state.users_data[name] = {
+                    "status": status if status else "متواجد حالياً",
+                    "gender": gender,
+                    "governorate": governorate,
+                    "avatar": profile_image
+                }
                 st.session_state.logged_in = True
                 st.rerun()
             else:
@@ -57,31 +72,44 @@ if not st.session_state.logged_in:
 
 # --- واجهة الدردشة الرئيسية (تظهر بعد الدخول) ---
 else:
-    st.title(f"💬 هلا بيك يا {st.session_state.user_name}")
+    current_user = st.session_state.user_name
+    current_data = st.session_state.users_data.get(current_user, {})
     
-    # القائمة الجانبية لعرض الحالات (Sidebar)
-    st.sidebar.header("📌 تواجد الأصدقاء")
-    for user, user_st in st.session_state.statuses.items():
-        st.sidebar.markdown(f"**🔹 {user}**")
-        st.sidebar.caption(f"{user_st}")
+    st.title(f"💬 هلا بيك يا {current_user}")
+    
+    # القائمة الجانبية لعرض تفاصيل وحالات الأصدقاء مع صورهم
+    st.sidebar.header("📌 الأصدقاء والمتواجدون")
+    for usr, data in st.session_state.users_data.items():
+        sb_col1, sb_col2 = st.sidebar.columns([1, 3])
+        with sb_col1:
+            if data.get("avatar"):
+                st.image(data["avatar"], width=40)
+            else:
+                st.write("👤")
+        with sb_col2:
+            st.sidebar.markdown(f"**{usr}**")
+            st.sidebar.caption(f"🏙️ {data.get('governorate')} | 🚻 {data.get('gender')}")
+            st.sidebar.caption(f"📌 {data.get('status')}")
         st.sidebar.write("---")
 
     # عرض الرسائل
     st.markdown("---")
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(f"**{message['user']}**: {message['content']}")
+            sender = message["user"]
+            s_data = st.session_state.users_data.get(sender, {})
+            gov = s_data.get('governorate', '')
+            gov_str = f" ({gov})" if gov else ""
+            st.markdown(f"**{sender}**{gov_str}: {message['content']}")
 
     # صندوق الإرسال
     if prompt := st.chat_input("اكتب رسالتك وسولف وياهم..."):
-        # فحص الحماية والتحذير
         is_allowed, warning_msg = check_moderation(prompt)
         if not is_allowed:
             st.warning(warning_msg)
         else:
-            # حفظ الرسالة وإرسال إشعار التليجرام
-            st.session_state.messages.append({"role": "user", "user": st.session_state.user_name, "content": prompt})
-            send_telegram_notification(st.session_state.user_name, prompt)
+            st.session_state.messages.append({"role": "user", "user": current_user, "content": prompt})
+            send_telegram_notification(current_user, prompt)
             st.rerun()
 
     # زر الخروج
